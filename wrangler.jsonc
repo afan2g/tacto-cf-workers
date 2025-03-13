@@ -8,7 +8,8 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2025-03-11",
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 1
 	}
 	/**
 	 * Smart Placement

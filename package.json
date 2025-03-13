@@ -15,5 +15,10 @@
 		"typescript": "^5.5.2",
 		"vitest": "~3.0.7",
 		"wrangler": "^3.114.1"
+	},
+	"dependencies": {
+		"@supabase/supabase-js": "^2.49.1",
+		"ethers": "^6.13.5",
+		"zksync-ethers": "^6.16.1"
 	}
 }
