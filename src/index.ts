@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ethers } from 'ethers';
 import { Provider, utils, types } from 'zksync-ethers';
+import axios from 'axios';
 
 // Constants
 const ZKSYNC_USDC_CONTRACT_ADDRESS = '0xAe045DE5638162fa134807Cb558E15A3F5A7F853';
@@ -26,6 +27,7 @@ const createJsonResponse = (data: any, status = 200) => {
 interface Env {
 	SUPABASE_URL: string;
 	SUPABASE_SERVICE_ROLE_KEY: string;
+	ALCHEMY_API_KEY: string;
 }
 
 interface TransactionInfo {
@@ -42,6 +44,108 @@ interface RequestBody {
 	txInfo?: TransactionInfo;
 	address?: string;
 }
+
+interface NonceResponse {
+	data: {
+		nonce?: string;
+		error?: string;
+		details?: string;
+	};
+	status: number;
+}
+
+// Standardized error handling
+const handleError = (error: unknown, context: string): NonceResponse => {
+	console.error(`Error in ${context}:`, error);
+
+	if (axios.isAxiosError(error)) {
+		if (error.response) {
+			return {
+				data: {
+					error: `Failed in ${context}`,
+					details: JSON.stringify(error.response.data),
+				},
+				status: error.response.status,
+			};
+		} else if (error.request) {
+			return {
+				data: {
+					error: `Request failed in ${context}`,
+					details: 'No response received',
+				},
+				status: 500,
+			};
+		}
+	}
+
+	return {
+		data: {
+			error: `Failed in ${context}`,
+			details: error instanceof Error ? error.message : 'Unknown error',
+		},
+		status: 500,
+	};
+};
+
+// Get nonce using the provider
+const getNonce = async (address: string): Promise<NonceResponse> => {
+	console.log('getNonce. Address: ', address);
+
+	if (!address) {
+		return { data: { error: 'Missing required parameter: address' }, status: 400 };
+	}
+
+	try {
+		const nonce = await provider.getTransactionCount(address, 'pending');
+		console.log('getNonce. Latest Nonce, perhaps pending: ', nonce);
+		return { data: { nonce: nonce.toString() }, status: 200 };
+	} catch (error) {
+		return handleError(error, 'getNonce');
+	}
+};
+
+// Get nonce using the Alchemy API
+const getNonceByFetch = async (address: string, ALCHEMY_API_KEY: string): Promise<NonceResponse> => {
+	console.log('getNonceByFetch. Address: ', address);
+
+	if (!address) {
+		return { data: { error: 'Missing required parameter: address' }, status: 400 };
+	}
+
+	const options = {
+		method: 'POST',
+		headers: { accept: 'application/json', 'content-type': 'application/json' },
+		data: JSON.stringify({
+			id: 1,
+			jsonrpc: '2.0',
+			params: [address, 'latest'],
+			method: 'eth_getTransactionCount',
+		}),
+	};
+
+	try {
+		const response = await axios.post(`https://zksync-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`, options.data, {
+			headers: options.headers,
+		});
+
+		console.log('getNonceByFetch. Response: ', response.data);
+
+		if (response.data.result) {
+			const nonceValue = parseInt(response.data.result, 16).toString();
+			return { data: { nonce: nonceValue }, status: 200 };
+		} else {
+			return {
+				data: {
+					error: 'Invalid response from Alchemy API',
+					details: 'No result field in response',
+				},
+				status: 500,
+			};
+		}
+	} catch (error) {
+		return handleError(error, 'getNonceByFetch');
+	}
+};
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -67,7 +171,7 @@ export default {
 		const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY;
 
 		if (!supabaseUrl || !supabaseServiceKey) {
-			//console.log('Missing Supabase configuration');
+			console.error('Missing Supabase configuration');
 			return createJsonResponse({ error: 'Server configuration error' }, 500);
 		}
 
@@ -77,7 +181,7 @@ export default {
 			// Authenticate user
 			const authHeader = request.headers.get('Authorization');
 			if (!authHeader) {
-				//console.log('Missing authorization header');
+				console.log('Missing authorization header');
 				return createJsonResponse({ error: 'Missing authorization header' }, 401);
 			}
 
@@ -88,6 +192,7 @@ export default {
 			} = await supabase.auth.getUser(jwt);
 
 			if (authError || !user) {
+				console.log('Authentication failed:', authError);
 				return createJsonResponse({ error: 'Authentication failed' }, 401);
 			}
 
@@ -95,47 +200,70 @@ export default {
 			let requestBody: RequestBody;
 			try {
 				requestBody = (await request.json()) as RequestBody;
+				console.log('Request body:', requestBody);
 			} catch (e) {
+				console.log('Invalid JSON in request body:', e);
 				return createJsonResponse({ error: 'Invalid JSON in request body' }, 400);
 			}
 
 			const { action, ...params } = requestBody;
 
 			if (!action) {
+				console.log('Missing required parameter: action');
 				return createJsonResponse({ error: 'Missing required parameter: action' }, 400);
 			}
 
-			//console.log('Received request:', action, params);
+			console.log('Received request:', action, params);
+
 			// Handle different actions
 			switch (action) {
+				case 'getNonce': {
+					const { address } = params;
+					if (!address) {
+						return createJsonResponse({ error: 'Missing required parameter: address' }, 400);
+					}
+					const nonceResponse = await getNonce(address);
+					return createJsonResponse(nonceResponse.data, nonceResponse.status);
+				}
+
+				case 'getNonceByFetch': {
+					const { address } = params;
+					if (!address) {
+						return createJsonResponse({ error: 'Missing required parameter: address' }, 400);
+					}
+					const nonceResponse = await getNonceByFetch(address, env.ALCHEMY_API_KEY);
+					console.log('getNonceByFetch. Response: ', nonceResponse.data);
+					return createJsonResponse(nonceResponse.data, nonceResponse.status);
+				}
+
 				case 'broadcastTxUSDC': {
 					// Validate required parameters
 					const { signedTransaction, txRequest, txInfo } = params;
 
-					//console.log('broadcastTxUSDC. SignedTransaction: ', signedTransaction);
-					//console.log('broadcastTxUSDC. txRequest: ', txRequest);
-					//console.log('broadcastTxUSDC. txInfo: ', txInfo);
 					if (!signedTransaction || !txRequest || !txInfo) {
-						//console.log('Missing required parameters for broadcastTxUSDC:', params);
+						console.log('Missing required parameters for broadcastTxUSDC:', params);
 						return createJsonResponse({ error: 'Missing required parameters for broadcastTxUSDC' }, 400);
 					}
 
 					// Validate txInfo fields
-					if (!txInfo.toUserId || !txInfo.methodId) {
-						//console.log('Missing required fields in txInfo:', txInfo);
+					if (!txInfo.toUserId || txInfo.methodId === undefined) {
+						console.log('Missing required fields in txInfo:', txInfo);
 						return createJsonResponse({ error: 'Missing required fields in txInfo' }, 400);
 					}
 
 					try {
 						// Broadcast transaction
 						const txResponseDetailedOutput = await provider.sendRawTransactionWithDetailedOutput(signedTransaction);
+						console.log('broadcastTxUSDC. Transaction response:', txResponseDetailedOutput);
 
 						// Format amount with error handling
 						let formattedAmount = '0';
 						try {
-							formattedAmount = ethers.formatUnits(txRequest.value ?? 0, 6); // USDC has 6 decimals
+							// Safely handle undefined value
+							const value = txRequest.value !== undefined ? txRequest.value : 0;
+							formattedAmount = ethers.formatUnits(value ?? 0, 6); // USDC has 6 decimals
 						} catch (error) {
-							//console.log('Error formatting amount:', error);
+							console.log('Error formatting amount:', error);
 						}
 
 						// Insert transaction record
@@ -159,7 +287,7 @@ export default {
 							.single();
 
 						if (txInsertError) {
-							//console.log('Failed to insert transaction record', txInsertError);
+							console.log('Failed to insert transaction record', txInsertError);
 							return createJsonResponse(
 								{
 									error: 'Failed to insert transaction record',
@@ -176,7 +304,7 @@ export default {
 							})
 						);
 					} catch (error) {
-						//console.log('Error broadcasting USDC transaction:', error);
+						console.log('Error broadcasting USDC transaction:', error);
 						return createJsonResponse(
 							{
 								error: 'Failed to broadcast USDC transaction',
@@ -190,6 +318,7 @@ export default {
 				case 'getCompleteTransferTx': {
 					const { txRequest } = params;
 					if (!txRequest || !txRequest.from || !txRequest.to || !txRequest.value) {
+						console.log('Invalid transaction request:', txRequest);
 						return createJsonResponse(
 							{
 								error: 'Invalid transaction request. Required: from, to, value',
@@ -199,20 +328,34 @@ export default {
 					}
 
 					try {
-						// Get balances and nonce in parallel
-						const [usdcBalance, ethBalance, nonce] = await Promise.all([
+						// Get balances
+						const [usdcBalance, nonceResponse] = await Promise.all([
 							provider.getBalance(txRequest.from, 'latest', ZKSYNC_USDC_CONTRACT_ADDRESS),
-							provider.getBalance(txRequest.from, 'latest'),
-							provider.getTransactionCount(txRequest.from),
+							getNonceByFetch(txRequest.from, env.ALCHEMY_API_KEY),
 						]);
 
+						// Verify nonceResponse has a nonce
+						if (!nonceResponse.data.nonce) {
+							return createJsonResponse(
+								{
+									error: 'Failed to get nonce',
+									details: nonceResponse.data.error || 'Unknown error',
+								},
+								nonceResponse.status
+							);
+						}
+
+						// Extract nonce value
+						const nonce = nonceResponse.data.nonce;
+
 						// Check USDC balance
-						if (usdcBalance < BigInt(txRequest.value)) {
+						const txValue = BigInt(txRequest.value.toString());
+						if (usdcBalance < txValue) {
 							return createJsonResponse(
 								{
 									error: 'Insufficient USDC balance',
 									available: usdcBalance.toString(),
-									required: txRequest.value.toString(),
+									required: txValue.toString(),
 								},
 								400
 							);
@@ -222,7 +365,7 @@ export default {
 						const transferTx = await provider.getTransferTx({
 							from: txRequest.from,
 							to: txRequest.to,
-							amount: txRequest.value,
+							amount: txValue,
 							token: ZKSYNC_USDC_CONTRACT_ADDRESS,
 						});
 
@@ -243,9 +386,10 @@ export default {
 							},
 						};
 
+						console.log('getCompleteTransferTx. Complete transfer transaction:', completeTransferTx);
 						return createJsonResponse(utils.toJSON(completeTransferTx));
 					} catch (error) {
-						//console.log('Error preparing transaction:', error);
+						console.log('Error preparing transaction:', error);
 						return createJsonResponse(
 							{
 								error: 'Failed to prepare transaction',
@@ -261,11 +405,12 @@ export default {
 				}
 			}
 		} catch (error) {
-			// console.log('Unexpected error:', error);
+			console.error('Unexpected error:', error);
+
 			ctx.waitUntil(
-				// Log detailed error information (you might want to send this to a logging service)
+				// Log detailed error information
 				new Promise<void>((resolve) => {
-					console.log({
+					console.error({
 						message: 'Worker execution failed',
 						error:
 							error instanceof Error
