@@ -1,0 +1,3 @@
+// zkSync Constants
+export const ZKSYNC_SEPOLIA_USDC_CONTRACT_ADDRESS = '0xAe045DE5638162fa134807Cb558E15A3F5A7F853';
+export const ZKSYNC_SEPOLIA_CHAIN_ID = 300; // zkSync Sepolia testnet
