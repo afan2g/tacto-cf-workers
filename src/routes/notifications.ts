@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { createSupabaseClient } from '../services/supabase';
 import { NotificationService, NotificationMessage } from '../services/notification';
 import { handleError } from '../utils/error-utils';
 import { Secrets, Variables } from '../types';
@@ -14,7 +13,7 @@ export const registerNotificationRoutes = (app: Hono<{ Bindings: Secrets; Variab
 			}
 
 			const user = c.get('user');
-			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+			const supabase = c.get('supabase');
 
 			// Check if token already exists for user
 			const { data: existingToken, error: checkError } = await supabase
@@ -63,7 +62,7 @@ export const registerNotificationRoutes = (app: Hono<{ Bindings: Secrets; Variab
 			}
 
 			const user = c.get('user');
-			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+			const supabase = c.get('supabase');
 
 			const { error } = await supabase.from('notification_tokens').delete().eq('user_id', user.id).eq('push_token', pushToken);
 
@@ -95,8 +94,7 @@ export const registerNotificationRoutes = (app: Hono<{ Bindings: Secrets; Variab
 
 			// Get the authenticated user
 			const user = c.get('user');
-			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
-
+			const supabase = c.get('supabase');
 			// Check if user has admin permissions (implement according to your auth model)
 			const { data: userData, error: userError } = await supabase.from('users').select('is_admin').eq('id', user.id).single();
 

@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import { utils } from 'zksync-ethers';
 import { broadcastTransaction, prepareTransferTransaction, checkUSDCBalance } from '../services/provider';
 import { getNonceFromAlchemy } from '../services/alchemy';
-import { createSupabaseClient, insertTransaction, insertPaymentRequest } from '../services/supabase';
+import { insertTransaction, insertPaymentRequest } from '../services/supabase';
 import { NotificationService } from '../services/notification';
 import { Secrets, Variables } from '../types';
 export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variables: Variables }>) => {
@@ -38,7 +38,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 
 			// Insert transaction record
 			const user = c.get('user');
-			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+			const supabase = c.get('supabase');
 
 			const transactionData = {
 				from_user_id: user.id,
@@ -142,7 +142,8 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			}
 
 			const user = c.get('user');
-			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+			const profile = c.get('profile');
+			const supabase = c.get('supabase');
 
 			const { data: requestee, error: requesteeError } = await supabase
 				.from('profiles')
@@ -169,7 +170,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				[requestee.id],
 				{
 					title: 'Payment Request',
-					body: `You have a new payment request from ${user.full_name}`,
+					body: `You have a new payment request from ${profile.full_name}`,
 					data: {
 						type: 'payment_request',
 						amount: paymentRequest.amount,
