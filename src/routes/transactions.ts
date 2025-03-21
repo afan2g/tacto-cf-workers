@@ -192,4 +192,90 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			);
 		}
 	});
+
+	app.post('/transactions/request/fulfill-request', async (c) => {
+		console.log('Fulfilling payment request');
+		try {
+			const { requestId, txRequest, signedTransaction } = await c.req.json();
+
+			if (!requestId || !txRequest || !signedTransaction) {
+				return c.json({ error: 'Missing required fields: requestId, txRequest, signedTransaction' }, 400);
+			}
+
+			const user = c.get('user');
+			const profile = c.get('profile');
+			const supabase = c.get('supabase');
+
+			// 1. Fetch the payment request
+			const { data: request, error: fetchError } = await supabase.from('payment_requests').select('*').eq('id', requestId).maybeSingle();
+
+			if (fetchError || !request) {
+				return c.json({ error: 'Payment request not found' }, 404);
+			}
+
+			// 2. Validate that the current user is the requestee
+			if (request.requestee_id !== user.id) {
+				return c.json({ error: 'You are not authorized to fulfill this request' }, 403);
+			}
+
+			// 3. Broadcast the transaction
+			const txResponse = await broadcastTransaction(signedTransaction);
+			console.log('Fulfilled transaction:', txResponse);
+
+			// 4. Format the amount
+			let formattedAmount = '0';
+			try {
+				formattedAmount = ethers.formatUnits(txRequest.value ?? 0, 6);
+			} catch (e) {
+				console.log('Error formatting value', e);
+			}
+			console.log('Txrequest', txRequest);
+			console.log('txrequest value', txRequest.value);
+			console.log('formatted amount', formattedAmount);
+			// 5. Insert the transaction record
+			const transactionData = {
+				from_user_id: user.id,
+				to_user_id: request.requester_id,
+				from_address: txRequest.from,
+				to_address: txRequest.to,
+				amount: formattedAmount,
+				method_id: 3, // Or set from context
+				request_id: requestId,
+				hash: txResponse.transactionHash,
+				status: 'pending',
+				asset: 'USDC',
+				fee: 0,
+				created_at: new Date().toISOString(),
+			};
+
+			const transactionRecord = await insertTransaction(supabase, transactionData);
+
+			// 6. Mark the payment request as fulfilled
+			await supabase
+				.from('payment_requests')
+				.update({
+					status: 'completed',
+					fulfilled_by: transactionRecord.id,
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', requestId);
+
+			return c.json(
+				utils.toJSON({
+					transaction_id: transactionRecord.id,
+					transaction_hash: txResponse.transactionHash,
+					status: 'completed',
+				})
+			);
+		} catch (error) {
+			console.log('Error fulfilling payment request:', error);
+			return c.json(
+				{
+					error: 'Failed to fulfill payment request',
+					details: error instanceof Error ? error.message : 'Unknown error',
+				},
+				500
+			);
+		}
+	});
 };
