@@ -289,6 +289,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			}
 
 			const user = c.get('user');
+			const profile = c.get('profile');
 			const supabase = c.get('supabase');
 
 			// 1. Fetch the payment request
@@ -312,6 +313,20 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				})
 				.eq('id', requestId);
 
+			//send notification to the requester
+			const notificationService = new NotificationService(c.env.EXPO_ACCESS_TOKEN);
+			await notificationService.sendPushNotifications(
+				[request.requester_id],
+				{
+					title: 'Payment Request',
+					body: `Your payment request has been declined by ${profile.full_name}`,
+					data: {
+						type: 'payment_request',
+						requestId: requestId,
+					},
+				},
+				supabase
+			);
 			return c.json({ success: true, message: 'Payment request declined successfully' });
 		} catch (error) {
 			console.log('Error declining payment request:', error);
@@ -335,6 +350,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			}
 
 			const user = c.get('user');
+			const profile = c.get('profile');
 			const supabase = c.get('supabase');
 
 			// 1. Fetch the payment request
@@ -358,6 +374,20 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				})
 				.eq('id', requestId);
 
+			//send notification to the requestee
+			const notificationService = new NotificationService(c.env.EXPO_ACCESS_TOKEN);
+			await notificationService.sendPushNotifications(
+				[request.requestee_id],
+				{
+					title: 'Payment Request',
+					body: `Your payment request has been cancelled by ${profile.full_name}`,
+					data: {
+						type: 'payment_request',
+						requestId: requestId,
+					},
+				},
+				supabase
+			);
 			return c.json({ success: true, message: 'Payment request cancelled successfully' });
 		} catch (error) {
 			console.log('Error cancelling payment request:', error);
