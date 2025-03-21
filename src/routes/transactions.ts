@@ -278,4 +278,96 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			);
 		}
 	});
+
+	app.post('/transactions/request/decline-request', async (c) => {
+		console.log('Declining payment request');
+		try {
+			const { requestId } = await c.req.json();
+
+			if (!requestId) {
+				return c.json({ error: 'Missing required fields: requestId' }, 400);
+			}
+
+			const user = c.get('user');
+			const supabase = c.get('supabase');
+
+			// 1. Fetch the payment request
+			const { data: request, error: fetchError } = await supabase.from('payment_requests').select('*').eq('id', requestId).maybeSingle();
+
+			if (fetchError || !request) {
+				return c.json({ error: 'Payment request not found' }, 404);
+			}
+
+			// 2. Validate that the current user is the requestee
+			if (request.requestee_id !== user.id) {
+				return c.json({ error: 'You are not authorized to decline this request' }, 403);
+			}
+
+			// 3. Mark the payment request as declined
+			await supabase
+				.from('payment_requests')
+				.update({
+					status: 'declined',
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', requestId);
+
+			return c.json({ success: true, message: 'Payment request declined successfully' });
+		} catch (error) {
+			console.log('Error declining payment request:', error);
+			return c.json(
+				{
+					error: 'Failed to decline payment request',
+					details: error instanceof Error ? error.message : 'Unknown error',
+				},
+				500
+			);
+		}
+	});
+
+	app.post('/transactions/request/cancel-request', async (c) => {
+		console.log('Cancelling payment request');
+		try {
+			const { requestId } = await c.req.json();
+
+			if (!requestId) {
+				return c.json({ error: 'Missing required fields: requestId' }, 400);
+			}
+
+			const user = c.get('user');
+			const supabase = c.get('supabase');
+
+			// 1. Fetch the payment request
+			const { data: request, error: fetchError } = await supabase.from('payment_requests').select('*').eq('id', requestId).maybeSingle();
+
+			if (fetchError || !request) {
+				return c.json({ error: 'Payment request not found' }, 404);
+			}
+
+			// 2. Validate that the current user is the requester
+			if (request.requester_id !== user.id) {
+				return c.json({ error: 'You are not authorized to cancel this request' }, 403);
+			}
+
+			// 3. Mark the payment request as cancelled
+			await supabase
+				.from('payment_requests')
+				.update({
+					status: 'canceled',
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', requestId);
+
+			return c.json({ success: true, message: 'Payment request cancelled successfully' });
+		} catch (error) {
+			console.log('Error cancelling payment request:', error);
+			return c.json(
+				{
+					error: 'Failed to cancel payment request',
+					details: error instanceof Error ? error.message : 'Unknown error',
+				},
+				500
+			);
+		}
+	});
 };
