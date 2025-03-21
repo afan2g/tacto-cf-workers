@@ -125,7 +125,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 		}
 	});
 
-	app.post('/transactions/request/create-request', async (c) => {
+	app.post('/transactions/request/create', async (c) => {
 		console.log('Creating payment request');
 		try {
 			// Get the request data directly, not nested under paymentRequest
@@ -193,7 +193,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 		}
 	});
 
-	app.post('/transactions/request/fulfill-request', async (c) => {
+	app.post('/transactions/request/fulfill', async (c) => {
 		console.log('Fulfilling payment request');
 		try {
 			const { requestId, txRequest, signedTransaction } = await c.req.json();
@@ -279,7 +279,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 		}
 	});
 
-	app.post('/transactions/request/decline-request', async (c) => {
+	app.post('/transactions/request/decline', async (c) => {
 		console.log('Declining payment request');
 		try {
 			const { requestId } = await c.req.json();
@@ -340,7 +340,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 		}
 	});
 
-	app.post('/transactions/request/cancel-request', async (c) => {
+	app.post('/transactions/request/cancel', async (c) => {
 		console.log('Cancelling payment request');
 		try {
 			const { requestId } = await c.req.json();
