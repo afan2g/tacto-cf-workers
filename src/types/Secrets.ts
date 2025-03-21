@@ -3,4 +3,5 @@ export interface Secrets {
 	SUPABASE_ANON_KEY: string;
 	SUPABASE_SERVICE_ROLE_KEY: string;
 	ALCHEMY_API_KEY: string;
+	EXPO_ACCESS_TOKEN: string;
 }

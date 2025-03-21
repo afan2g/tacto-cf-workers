@@ -20,6 +20,7 @@
 		"@supabase/supabase-js": "^2.49.1",
 		"axios": "^1.8.3",
 		"ethers": "^6.13.5",
+		"expo-server-sdk": "^3.14.0",
 		"hono": "^4.7.4",
 		"zksync-ethers": "^6.16.1"
 	}

@@ -3,11 +3,12 @@ import { ethers } from 'ethers';
 import { utils } from 'zksync-ethers';
 import { broadcastTransaction, prepareTransferTransaction, checkUSDCBalance } from '../services/provider';
 import { getNonceFromAlchemy } from '../services/alchemy';
-import { createSupabaseClient, insertTransaction } from '../services/supabase';
+import { createSupabaseClient, insertTransaction, insertPaymentRequest } from '../services/supabase';
+import { NotificationService } from '../services/notification';
 import { Secrets, Variables } from '../types';
 export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variables: Variables }>) => {
 	// Route: Broadcast USDC Transaction
-	app.post('/transactions/usdc', async (c) => {
+	app.post('/transactions/send/broadcast-usdc', async (c) => {
 		try {
 			const { signedTransaction, txRequest, txInfo } = await c.req.json();
 
@@ -75,7 +76,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 	});
 
 	// Route: Get Complete Transfer Transaction
-	app.post('/transactions/prepare', async (c) => {
+	app.post('/transactions/send/prepare-usdc', async (c) => {
 		try {
 			const { txRequest } = await c.req.json();
 
@@ -117,6 +118,73 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			return c.json(
 				{
 					error: 'Failed to prepare transaction',
+					details: error instanceof Error ? error.message : 'Unknown error',
+				},
+				500
+			);
+		}
+	});
+
+	app.post('/transactions/request/create-request', async (c) => {
+		console.log('Creating payment request');
+		try {
+			// Get the request data directly, not nested under paymentRequest
+			const { paymentRequest } = await c.req.json();
+
+			console.log('Payment request data:', paymentRequest);
+			// Check required fields on the main object
+			if (!paymentRequest.amount || !paymentRequest.recipientUser?.id || paymentRequest.methodId === undefined) {
+				console.log('Invalid payment request. recipient user:', paymentRequest.recipientUser?.id);
+				console.log('Invalid payment request. method id:', paymentRequest.methodId);
+				console.log('Invalid payment request. amount:', paymentRequest.amount);
+
+				return c.json({ error: 'Missing required payment request fields' }, 400);
+			}
+
+			const user = c.get('user');
+			const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+
+			const { data: requestee, error: requesteeError } = await supabase
+				.from('profiles')
+				.select('id')
+				.eq('id', paymentRequest.recipientUser.id)
+				.maybeSingle();
+
+			if (requesteeError || !requestee) {
+				return c.json({ error: 'Requestee not found' }, 400);
+			}
+
+			// Insert the payment request
+			await insertPaymentRequest(supabase, {
+				requester_id: user.id,
+				requestee_id: requestee.id,
+				amount: paymentRequest.amount,
+				message: paymentRequest.message || '', // Use message directly from requestData
+				status: 'pending',
+			});
+
+			// Send notification
+			const notificationService = new NotificationService(c.env.EXPO_ACCESS_TOKEN);
+			await notificationService.sendPushNotifications(
+				[requestee.id],
+				{
+					title: 'Payment Request',
+					body: `You have a new payment request from ${user.full_name}`,
+					data: {
+						type: 'payment_request',
+						amount: paymentRequest.amount,
+						requesterId: user.id,
+					},
+				},
+				supabase
+			);
+
+			return c.json({ success: true, message: 'Payment request created successfully' });
+		} catch (error) {
+			console.log('Error creating payment request:', error);
+			return c.json(
+				{
+					error: 'Failed to create payment request',
 					details: error instanceof Error ? error.message : 'Unknown error',
 				},
 				500

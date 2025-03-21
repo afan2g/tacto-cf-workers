@@ -14,3 +14,12 @@ export const insertTransaction = async (supabase: any, transactionData: any) => 
 
 	return data;
 };
+
+export const insertPaymentRequest = async (supabase: any, paymentRequestData: any) => {
+	const { error } = await supabase.from('payment_requests').insert(paymentRequestData);
+
+	if (error) {
+		console.log('Failed to insert payment request record', error);
+		throw new Error(`Failed to insert payment request record: ${error.message}`);
+	}
+};
