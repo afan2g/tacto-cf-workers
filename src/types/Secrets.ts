@@ -4,4 +4,5 @@ export interface Secrets {
 	SUPABASE_SERVICE_ROLE_KEY: string;
 	ALCHEMY_API_KEY: string;
 	EXPO_ACCESS_TOKEN: string;
+	ALCHEMY_ZKSYNC_SEPOLIA_WEBHOOK_SIGNING_KEY: string;
 }

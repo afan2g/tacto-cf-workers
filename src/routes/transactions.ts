@@ -400,4 +400,80 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 			);
 		}
 	});
+
+	app.post('/transactions/request/remind', async (c) => {
+		console.log('Reminding payment request');
+		try {
+			const { requestId } = await c.req.json();
+
+			if (!requestId) {
+				return c.json({ error: 'Missing required fields: requestId' }, 400);
+			}
+
+			const user = c.get('user');
+			const profile = c.get('profile');
+			const supabase = c.get('supabase');
+
+			// 1. Fetch the payment request
+			const { data: request, error: fetchError } = await supabase.from('payment_requests').select('*').eq('id', requestId).maybeSingle();
+
+			if (fetchError || !request) {
+				return c.json({ error: 'Payment request not found' }, 404);
+			}
+
+			// 2. Validate that the current user is the requester
+			if (request.requester_id !== user.id) {
+				return c.json({ error: 'You are not authorized to remind this request' }, 403);
+			}
+
+			// 3. Ensure that the request is still pending
+			if (request.status !== 'pending') {
+				return c.json({ error: 'Cannot remind a request that is not pending' }, 400);
+			}
+
+			// 4. Check if a reminder has already been sent within the last 12 hours
+			const now = new Date();
+			const lastReminder = new Date(request.last_reminder_sent_at);
+			const diff = now.getTime() - lastReminder.getTime();
+			const hours = diff / (1000 * 60 * 60);
+			if (hours < 12) {
+				return c.json({ error: 'A reminder has already been sent within the last 12 hours' }, 400);
+			}
+
+			// 5. Send the reminder
+			const notificationService = new NotificationService(c.env.EXPO_ACCESS_TOKEN);
+			await notificationService.sendPushNotifications(
+				[request.requestee_id],
+				{
+					title: 'Payment Request',
+					body: `You have a pending payment request from ${profile.full_name}`,
+					data: {
+						type: 'payment_request',
+						requestId: requestId,
+					},
+				},
+				supabase
+			);
+
+			// 6. Update the last reminder sent timestamp
+			await supabase
+				.from('payment_requests')
+				.update({
+					last_reminder_sent_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', requestId);
+
+			return c.json({ success: true, message: 'Payment request reminder sent successfully' });
+		} catch (error) {
+			console.log('Error reminding payment request:', error);
+			return c.json(
+				{
+					error: 'Failed to remind payment request',
+					details: error instanceof Error ? error.message : 'Unknown error',
+				},
+				500
+			);
+		}
+	});
 };

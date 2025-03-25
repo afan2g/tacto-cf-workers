@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { registerNonceRoutes } from './routes/nonce';
 import { registerTransactionRoutes } from './routes/transactions';
+import { registerWebhookRoutes } from './routes/webhooks';
 import { authMiddleware, profileMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error-handler';
 import { Secrets, Variables } from './types';
@@ -20,6 +21,8 @@ app.use(
 		maxAge: 86400,
 	})
 );
+
+registerWebhookRoutes(app);
 
 // Apply auth to all routes except OPTIONS
 app.use('/*', async (c, next) => {

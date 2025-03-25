@@ -4,4 +4,5 @@ export interface Variables {
 	user: User;
 	profile: Profile;
 	supabase: any;
+	jsonBody: any;
 }
