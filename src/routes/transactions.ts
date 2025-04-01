@@ -170,7 +170,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				[requestee.id],
 				{
 					title: 'Payment Request',
-					body: `You have a new payment request from ${profile.full_name}`,
+					body: `${profile.full_name} requested ${paymentRequest.amount} USDC`,
 					data: {
 						type: 'payment_request',
 						amount: paymentRequest.amount,
@@ -319,7 +319,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				[request.requester_id],
 				{
 					title: 'Payment Request',
-					body: `Your payment request has been declined by ${profile.full_name}`,
+					body: `${profile.full_name} declined your payment request for ${request.amount} USDC`,
 					data: {
 						type: 'payment_request',
 						requestId: requestId,
@@ -380,7 +380,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				[request.requestee_id],
 				{
 					title: 'Payment Request',
-					body: `Your payment request has been cancelled by ${profile.full_name}`,
+					body: `${profile.full_name} cancelled a request for ${request.amount} USDC`,
 					data: {
 						type: 'payment_request',
 						requestId: requestId,
@@ -446,7 +446,7 @@ export const registerTransactionRoutes = (app: Hono<{ Bindings: Secrets; Variabl
 				[request.requestee_id],
 				{
 					title: 'Payment Request',
-					body: `You have a pending payment request from ${profile.full_name}`,
+					body: `You have a pending payment request from ${profile.full_name} for ${request.amount} USDC`,
 					data: {
 						type: 'payment_request',
 						requestId: requestId,

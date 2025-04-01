@@ -1,13 +1,15 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { registerNonceRoutes } from './routes/nonce';
-import { registerTransactionRoutes } from './routes/transactions';
-import { registerWebhookRoutes } from './routes/webhooks';
+import {
+	registerFriendRoutes,
+	registerNonceRoutes,
+	registerNotificationRoutes,
+	registerTransactionRoutes,
+	registerWebhookRoutes,
+} from './routes';
 import { authMiddleware, profileMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error-handler';
 import { Secrets, Variables } from './types';
-import { registerNotificationRoutes } from './routes';
-
 // Initialize Hono app
 const app = new Hono<{ Bindings: Secrets; Variables: Variables }>();
 
@@ -32,12 +34,12 @@ app.use('/*', async (c, next) => {
 	return authMiddleware(c, next);
 });
 app.use('/transactions/request/*', profileMiddleware);
-
+app.use('/friends/*', profileMiddleware);
 // Register route handlers
 registerNonceRoutes(app);
 registerTransactionRoutes(app);
 registerNotificationRoutes(app);
-
+registerFriendRoutes(app);
 // Error handling
 app.onError(errorHandler);
 
